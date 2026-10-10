@@ -205,20 +205,29 @@ func TestFlagConfigUpdateAndToggle(t *testing.T) {
 	}
 }
 
-func TestNoOpSaveIsNotAudited(t *testing.T) {
+func TestNoOpSavesAreSkipped(t *testing.T) {
 	f := newFixture(t, "prod")
 	f.flag("checkout")
+	sub := f.subscribe("prod")
 	cfg, _ := f.svc.GetFlagConfig(f.ctx, "prod", "checkout")
 	saved, err := f.svc.UpdateFlagConfig(f.ctx, "prod", "checkout", cfg, AnyVersion, "")
-	if err != nil {
+	if err != nil || saved.Version != 0 {
+		t.Fatalf("saving the default config should be a no-op: %+v %v", saved, err)
+	}
+	if _, err := f.svc.ToggleFlag(f.ctx, "prod", "checkout", false, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.UpdateFlagConfig(f.ctx, "prod", "checkout", saved, AnyVersion, ""); err != nil {
-		t.Fatal(err)
+	if _, err := f.svc.UpdateFlagConfig(f.ctx, "prod", "checkout", cfg, 7, ""); !errors.Is(err, store.ErrConflict) {
+		t.Errorf("a no-op based on the wrong version should still conflict: %v", err)
 	}
 	entries, _ := f.svc.ListAudit(f.ctx, audit.Filter{ResourceType: audit.ResourceFlagConfig})
 	if len(entries) != 0 {
 		t.Errorf("no-op saves produced %d audit entries", len(entries))
+	}
+	select {
+	case ev := <-sub.C:
+		t.Errorf("no-op save published %s", ev.Type)
+	default:
 	}
 }
 
@@ -285,6 +294,7 @@ func TestUpdateFlagGuards(t *testing.T) {
 	f := newFixture(t, "prod")
 	fl := f.flag("checkout")
 	cfg, _ := f.svc.GetFlagConfig(f.ctx, "prod", "checkout")
+	cfg.Enabled = true
 	if _, err := f.svc.UpdateFlagConfig(f.ctx, "prod", "checkout", cfg, 0, ""); err != nil {
 		t.Fatal(err)
 	}

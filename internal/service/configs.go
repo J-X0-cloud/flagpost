@@ -103,6 +103,14 @@ func (s *Service) saveConfig(ctx context.Context, env, flagKey, action, comment 
 		if expectedVersion == AnyVersion {
 			expectedVersion = before.Version
 		}
+		next.Version, next.UpdatedAt = before.Version, before.UpdatedAt
+		if same, err := unchanged(before, next); err != nil || same {
+			if same && before.Version != expectedVersion {
+				return fmt.Errorf("flag config %s/%s: %w", env, flagKey, store.ErrConflict)
+			}
+			saved = before
+			return err
+		}
 		if saved, err = tx.PutFlagConfig(ctx, next, expectedVersion); err != nil {
 			return err
 		}

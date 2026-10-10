@@ -68,6 +68,15 @@ func (s *Service) UpdateSegment(ctx context.Context, seg model.Segment, expected
 		if expectedVersion == AnyVersion {
 			expectedVersion = before.Version
 		}
+		probe := seg
+		probe.Version, probe.CreatedAt, probe.UpdatedAt = before.Version, before.CreatedAt, before.UpdatedAt
+		if same, err := unchanged(before, probe); err != nil || same {
+			if same && before.Version != expectedVersion {
+				return fmt.Errorf("segment %q: %w", seg.Key, store.ErrConflict)
+			}
+			updated = before
+			return err
+		}
 		if updated, err = tx.UpdateSegment(ctx, seg, expectedVersion); err != nil {
 			return err
 		}

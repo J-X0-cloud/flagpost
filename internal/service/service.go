@@ -117,13 +117,22 @@ func (s *Service) write(ctx context.Context, fn func(tx *store.Tx, p *pending) e
 	return nil
 }
 
+// auditIgnore lists bookkeeping fields excluded from audit diffs and from
+// change detection.
+var auditIgnore = []string{"version", "updatedAt", "createdAt", "revision"}
+
+// unchanged reports whether two versions of a document differ only in
+// bookkeeping fields. Saves that change nothing are skipped entirely: no
+// version bump, no audit entry and no stream event.
+func unchanged(before, after any) (bool, error) {
+	changes, err := audit.Diff(before, after, audit.DiffOptions{Ignore: auditIgnore})
+	return len(changes) == 0, err
+}
+
 func recordAudit(ctx context.Context, tx *store.Tx, action, resourceType, key, env, comment string, before, after any) error {
-	changes, err := audit.Diff(before, after, audit.DiffOptions{Ignore: []string{"version", "updatedAt", "createdAt", "revision"}})
+	changes, err := audit.Diff(before, after, audit.DiffOptions{Ignore: auditIgnore})
 	if err != nil {
 		return err
-	}
-	if action == audit.ActionUpdate && len(changes) == 0 && comment == "" {
-		return nil // no-op saves do not clutter the log
 	}
 	var b, a json.RawMessage
 	if before != nil {

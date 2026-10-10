@@ -60,6 +60,15 @@ func (s *Service) UpdateFlag(ctx context.Context, f model.Flag, expectedVersion 
 		if err := checkVariantsStillServed(ctx, tx, &f); err != nil {
 			return err
 		}
+		probe := f
+		probe.Version, probe.CreatedAt, probe.UpdatedAt = before.Version, before.CreatedAt, before.UpdatedAt
+		if same, err := unchanged(before, probe); err != nil || same {
+			if same && before.Version != expectedVersion {
+				return fmt.Errorf("flag %q: %w", f.Key, store.ErrConflict)
+			}
+			updated = before
+			return err
+		}
 		if updated, err = tx.UpdateFlag(ctx, f, expectedVersion); err != nil {
 			return err
 		}
