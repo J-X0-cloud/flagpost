@@ -16,7 +16,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"sync"
 
@@ -279,8 +278,4 @@ func redactEnv(e model.Environment) model.Environment {
 // ListAudit returns audit entries newest first.
 func (s *Service) ListAudit(ctx context.Context, f audit.Filter) ([]audit.Entry, error) {
 	return s.store.ListAudit(ctx, f)
-}
-
-func wrapf(err error, format string, args ...any) error {
-	return fmt.Errorf("%s: %w", fmt.Sprintf(format, args...), err)
 }
