@@ -55,6 +55,12 @@ func main() {
 	if err := client.WaitReady(ctx); err != nil {
 		log.Fatal(err)
 	}
+	// The initial snapshot also fired OnUpdate; drop that signal so the
+	// first round of results is not printed twice.
+	select {
+	case <-changed:
+	default:
+	}
 	fmt.Println("watching for changes; press Ctrl+C to exit")
 
 	stop, done := signal.NotifyContext(context.Background(), os.Interrupt)
