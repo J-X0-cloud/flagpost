@@ -1,0 +1,21 @@
+# Binaries
+/flagpost
+/bin/
+*.exe
+*.test
+
+# Coverage and profiling output
+*.out
+*.prof
+coverage.html
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store
