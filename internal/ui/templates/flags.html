@@ -1,0 +1,58 @@
+{{define "content"}}
+<div class="heading">
+  <h1>Flags <span class="muted">in {{.Env}}</span></h1>
+  <form method="get" class="search">
+    <input name="q" value="{{.Data.Query}}" placeholder="Filter by key, name or tag">
+  </form>
+</div>
+<p class="muted">Snapshot revision {{.Data.Revision}}</p>
+<table>
+  <thead><tr><th>Flag</th><th>Kind</th><th>Status</th><th>Fallthrough</th><th>Rules</th><th></th></tr></thead>
+  <tbody>
+  {{range .Data.Rows}}
+  {{$f := .State.Flag}}{{$c := .State.Config}}
+  <tr>
+    <td><a href="/ui/env/{{pathEscape $.Env}}/flags/{{pathEscape $f.Key}}"><code>{{$f.Key}}</code></a>
+      <div class="muted">{{$f.Name}}{{range $f.Tags}} <span class="tag">{{.}}</span>{{end}}</div></td>
+    <td>{{$f.Kind}}</td>
+    <td>{{if $c.Enabled}}<span class="pill on">on</span>{{else}}<span class="pill off">off</span>{{end}}</td>
+    <td>{{.Serve}}</td>
+    <td>{{len $c.Rules}}</td>
+    <td>
+      <form method="post" action="/ui/env/{{pathEscape $.Env}}/flags/{{pathEscape $f.Key}}/toggle">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}">
+        <input type="hidden" name="enabled" value="{{if $c.Enabled}}false{{else}}true{{end}}">
+        <button class="small">{{if $c.Enabled}}Turn off{{else}}Turn on{{end}}</button>
+      </form>
+    </td>
+  </tr>
+  {{else}}
+  <tr><td colspan="6" class="muted">No flags match.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+
+<section class="card">
+  <h2>New flag</h2>
+  <form method="post" action="/ui/flags" class="grid">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="env" value="{{.Env}}">
+    <label>Key <input name="key" placeholder="new-checkout" required></label>
+    <label>Name <input name="name" placeholder="New checkout" required></label>
+    <label>Kind
+      <select name="kind">
+        <option value="boolean">boolean</option>
+        <option value="string">string</option>
+        <option value="number">number</option>
+        <option value="json">json</option>
+      </select>
+    </label>
+    <label>Tags <input name="tags" placeholder="payments, web"></label>
+    <label class="wide">Description <input name="description"></label>
+    <label class="wide">Variants (JSON; leave empty for boolean on/off)
+      <textarea name="variants" rows="4" placeholder='[{"key": "control", "value": "Buy"}, {"key": "treatment", "value": "Buy now"}]'></textarea>
+    </label>
+    <button>Create flag</button>
+  </form>
+</section>
+{{end}}

@@ -1,0 +1,34 @@
+{{define "content"}}
+<h1>Segments <span class="muted">in {{.Env}}</span></h1>
+<table>
+  <thead><tr><th>Segment</th><th>Included</th><th>Excluded</th><th>Rules</th><th>Updated</th></tr></thead>
+  <tbody>
+  {{range .Data}}
+  <tr>
+    <td><a href="/ui/env/{{pathEscape $.Env}}/segments/{{pathEscape .Key}}"><code>{{.Key}}</code></a><div class="muted">{{.Name}}</div></td>
+    <td>{{len .Included}}</td><td>{{len .Excluded}}</td><td>{{len .Rules}}</td><td>{{time .UpdatedAt}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="5" class="muted">No segments yet.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+
+<section class="card">
+  <h2>New segment</h2>
+  <form method="post" action="/ui/env/{{pathEscape .Env}}/segments">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Key <input name="key" placeholder="beta-testers" required></label>
+    <textarea name="segment" rows="10" class="code" spellcheck="false">{
+  "name": "Beta testers",
+  "description": "",
+  "included": [],
+  "excluded": [],
+  "rules": [
+    {"clauses": [{"attribute": "email", "operator": "ends_with", "values": ["@example.com"]}]}
+  ]
+}</textarea>
+    <button>Create segment</button>
+  </form>
+</section>
+{{end}}

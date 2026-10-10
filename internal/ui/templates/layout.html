@@ -1,0 +1,54 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} - flagpost</title>
+<link rel="stylesheet" href="/ui/static/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/ui/">flagpost</a>
+  {{if .CSRF}}
+  <nav>
+    {{if .Env}}
+    <a href="/ui/env/{{pathEscape .Env}}/flags">Flags</a>
+    <a href="/ui/env/{{pathEscape .Env}}/segments">Segments</a>
+    <a href="/ui/audit?env={{.Env}}">Audit</a>
+    {{end}}
+    <a href="/ui/environments">Environments</a>
+  </nav>
+  {{if .Environments}}
+  <div class="envs">
+    {{range .Environments}}<a class="env{{if eq .Key $.Env}} current{{end}}" href="/ui/env/{{pathEscape .Key}}/flags">{{.Name}}</a>{{end}}
+  </div>
+  {{end}}
+  <form method="post" action="/ui/logout" class="logout">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button class="link">Sign out</button>
+  </form>
+  {{end}}
+</header>
+<main>
+  {{if .Flash}}<p class="flash">{{.Flash}}</p>{{end}}
+  {{if .Error}}<div class="error"><p>{{.Error}}</p>
+    {{if .Problems}}<ul>{{range .Problems}}<li><code>{{.Field}}</code> {{.Message}}</li>{{end}}</ul>{{end}}
+  </div>{{end}}
+  {{template "content" .}}
+</main>
+</body>
+</html>{{end}}
+
+{{define "audit-entries"}}
+<ul class="audit">
+{{range .}}
+  <li>
+    <div><strong>{{.Action}}</strong> {{.ResourceType}} <code>{{.ResourceKey}}</code>{{if .Environment}} in {{.Environment}}{{end}} by {{.Actor}} <span class="muted">{{time .At}}</span></div>
+    {{if .Comment}}<div class="comment">{{.Comment}}</div>{{end}}
+    {{if .Changes}}<ul class="changes">{{range .Changes}}<li><code>{{.Path}}</code> {{.Op}}{{if .Old}} <code class="old">{{raw .Old}}</code>{{end}}{{if .New}} <code class="new">{{raw .New}}</code>{{end}}</li>{{end}}</ul>{{end}}
+  </li>
+{{else}}
+  <li class="muted">No changes recorded.</li>
+{{end}}
+</ul>
+{{end}}

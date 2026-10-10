@@ -1,0 +1,5 @@
+{{define "content"}}
+<h1>Audit log{{if .Env}} <span class="muted">for {{.Env}}</span>{{end}}{{if .Data.Key}} <span class="muted">for <code>{{.Data.Key}}</code></span>{{end}}</h1>
+{{template "audit-entries" .Data.Entries}}
+{{if .Data.Next}}<p><a href="/ui/audit?env={{.Env}}&amp;key={{.Data.Key}}&amp;before={{.Data.Next}}">Older entries</a></p>{{end}}
+{{end}}

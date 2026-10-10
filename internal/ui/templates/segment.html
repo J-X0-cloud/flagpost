@@ -1,0 +1,19 @@
+{{define "content"}}
+{{$s := .Data.Segment}}
+<h1>{{if .Data.New}}New segment{{else}}Segment <code>{{$s.Key}}</code>{{end}} <span class="muted">in {{.Env}}</span></h1>
+<section class="card">
+  <form method="post" action="/ui/env/{{pathEscape .Env}}/segments">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    {{if .Data.New}}
+    <label>Key <input name="key" value="{{$s.Key}}" required></label>
+    {{else}}
+    <input type="hidden" name="key" value="{{$s.Key}}">
+    <input type="hidden" name="version" value="{{$s.Version}}">
+    <p class="muted">Version {{$s.Version}}, updated {{time $s.UpdatedAt}}</p>
+    {{end}}
+    <textarea name="segment" rows="20" class="code" spellcheck="false">{{.Data.JSON}}</textarea>
+    <p class="muted">Excluded keys beat included keys, which beat rules. A rule with a <code>weight</code> (out of 100000) includes only that share of matching contexts.</p>
+    <button>Save segment</button>
+  </form>
+</section>
+{{end}}

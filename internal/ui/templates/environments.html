@@ -1,0 +1,30 @@
+{{define "content"}}
+<h1>Environments</h1>
+<table>
+  <thead><tr><th>Key</th><th>Name</th><th>Revision</th><th>SDK key</th><th>Created</th></tr></thead>
+  <tbody>
+  {{range .Environments}}
+  <tr>
+    <td><a href="/ui/env/{{pathEscape .Key}}/flags"><code>{{.Key}}</code></a></td>
+    <td>{{.Name}}<div class="muted">{{.Description}}</div></td>
+    <td>{{.Revision}}</td>
+    <td><code class="secret">{{.SDKKey}}</code></td>
+    <td>{{time .CreatedAt}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="5" class="muted">No environments yet. Create one to start adding flags.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+
+<section class="card">
+  <h2>New environment</h2>
+  <form method="post" action="/ui/environments" class="grid">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>Key <input name="key" placeholder="production" required pattern="[A-Za-z0-9][A-Za-z0-9._\-]*"></label>
+    <label>Name <input name="name" placeholder="Production" required></label>
+    <label class="wide">Description <input name="description"></label>
+    <button>Create environment</button>
+  </form>
+</section>
+{{end}}

@@ -1,0 +1,84 @@
+{{define "content"}}
+{{$f := .Data.State.Flag}}{{$c := .Data.State.Config}}
+<div class="heading">
+  <h1><code>{{$f.Key}}</code> <span class="muted">{{$f.Name}}</span></h1>
+  <form method="post" action="/ui/env/{{pathEscape .Env}}/flags/{{pathEscape $f.Key}}/toggle">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="from" value="detail">
+    <input type="hidden" name="enabled" value="{{if $c.Enabled}}false{{else}}true{{end}}">
+    {{if $c.Enabled}}<span class="pill on">on in {{.Env}}</span>{{else}}<span class="pill off">off in {{.Env}}</span>{{end}}
+    <button>{{if $c.Enabled}}Turn off{{else}}Turn on{{end}}</button>
+  </form>
+</div>
+{{if $f.Description}}<p>{{$f.Description}}</p>{{end}}
+
+<section class="card">
+  <h2>Variants</h2>
+  <table>
+    <thead><tr><th>Key</th><th>Value</th><th>Description</th></tr></thead>
+    <tbody>{{range $f.Variants}}<tr><td><code>{{.Key}}</code></td><td><code>{{raw .Value}}</code></td><td>{{.Description}}</td></tr>{{end}}</tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Targeting in {{.Env}} <span class="muted">version {{$c.Version}}</span></h2>
+  <form method="post" action="/ui/env/{{pathEscape .Env}}/flags/{{pathEscape $f.Key}}/config">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="version" value="{{$c.Version}}">
+    <textarea name="config" rows="22" class="code" spellcheck="false">{{.Data.ConfigJSON}}</textarea>
+    <p class="muted">Operators: {{range $i, $op := .Data.Operators}}{{if $i}}, {{end}}<code>{{$op}}</code>{{end}}.
+      Rollout weights are in thousandths of a percent and must sum to 100000.</p>
+    <label>Comment <input name="comment" placeholder="Why this change?"></label>
+    <button>Save targeting</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Try it</h2>
+  <form method="post" action="/ui/env/{{pathEscape .Env}}/flags/{{pathEscape $f.Key}}/evaluate">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <textarea name="context" rows="4" class="code" spellcheck="false">{{.Data.Context}}</textarea>
+    <button>Evaluate</button>
+  </form>
+  {{with .Data.Result}}
+  <div class="result">
+    {{if .Failed}}<p><strong>Error</strong> <code>{{.Error}}</code> {{.Message}}</p>
+    {{else}}<p>Serves <code>{{.Variant}}</code> = <code>{{raw .Value}}</code> because <strong>{{.Reason}}</strong>{{if .RuleID}} (rule <code>{{.RuleID}}</code>){{end}}{{if .PrerequisiteKey}} (prerequisite <code>{{.PrerequisiteKey}}</code>){{end}}{{if .InExperiment}}, counted in the experiment{{end}}.</p>{{end}}
+    {{if .Trace}}<pre class="trace">{{join .Trace "\n"}}</pre>{{end}}
+  </div>
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>Experiment results</h2>
+  <form method="get" class="inline">
+    <label>Conversion event <input name="metric" value="{{.Data.Metric}}" placeholder="purchase" required></label>
+    <button>Analyse</button>
+  </form>
+  {{if .Data.ResultsErr}}<p class="error">{{.Data.ResultsErr}}</p>{{end}}
+  {{with .Data.Results}}
+  <table>
+    <thead><tr><th>Variant</th><th>Exposed</th><th>Converted</th><th>Rate</th><th>95% interval</th><th>Lift</th><th>p-value</th><th></th></tr></thead>
+    <tbody>
+    {{range .Arms}}
+    <tr>
+      <td><code>{{.Variant}}</code>{{if .Control}} <span class="tag">control</span>{{end}}</td>
+      <td>{{.Exposed}}</td><td>{{.Converted}}</td><td>{{pct .Rate}}</td>
+      <td>{{pct .Interval.Low}} to {{pct .Interval.High}}</td>
+      <td>{{if .Lift}}{{pct (deref .Lift)}}{{end}}</td>
+      <td>{{if .PValue}}{{printf "%.4f" (deref .PValue)}}{{end}}</td>
+      <td>{{if .Significant}}<span class="pill on">significant</span>{{end}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  {{if .SRMDetected}}<p class="error">Sample ratio mismatch detected (p = {{printf "%.6f" (deref .SRMPValue)}}). Exposure counts do not match the configured split, so these results are not trustworthy.</p>{{end}}
+  {{end}}
+</section>
+
+<section class="card">
+  <h2>History</h2>
+  {{template "audit-entries" .Data.Audit}}
+  <p><a href="/ui/audit?key={{$f.Key}}">Full history</a></p>
+</section>
+{{end}}
