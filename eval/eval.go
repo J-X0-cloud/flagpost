@@ -138,15 +138,15 @@ func (e *Evaluator) Snapshot() *model.Snapshot { return e.snap }
 
 // Evaluate evaluates flagKey for ctx.
 func (e *Evaluator) Evaluate(flagKey string, ctx Context) Result {
-	r := &run{e: e, ctx: ctx}
-	return r.flag(flagKey)
+	return newRun(e, ctx).flag(flagKey)
 }
 
 // Explain evaluates flagKey for ctx and records a human-readable trace of
 // every decision in Result.Trace. It is slower than Evaluate and meant for
 // debugging tools.
 func (e *Evaluator) Explain(flagKey string, ctx Context) Result {
-	r := &run{e: e, ctx: ctx, trace: &[]string{}}
+	r := newRun(e, ctx)
+	r.trace = &[]string{}
 	res := r.flag(flagKey)
 	res.Trace = *r.trace
 	return res
@@ -160,7 +160,7 @@ func (e *Evaluator) EvaluateAll(ctx Context) []Result {
 	}
 	slices.Sort(keys)
 	out := make([]Result, 0, len(keys))
-	r := &run{e: e, ctx: ctx}
+	r := newRun(e, ctx)
 	for _, k := range keys {
 		out = append(out, r.flag(k))
 	}
@@ -176,7 +176,23 @@ type run struct {
 	trace    *[]string
 	flags    []string
 	segments []string
-	segMemo  map[string]bool
+	segMemo  []segMemo
+	// Inline backing storage keeps typical evaluations allocation-free
+	// for the stacks and memo.
+	flagBuf [4]string
+	segBuf  [4]string
+	memoBuf [4]segMemo
+}
+
+type segMemo struct {
+	key string
+	in  bool
+}
+
+func newRun(e *Evaluator, ctx Context) *run {
+	r := &run{e: e, ctx: ctx}
+	r.flags, r.segments, r.segMemo = r.flagBuf[:0], r.segBuf[:0], r.memoBuf[:0]
+	return r
 }
 
 func (r *run) tracef(format string, args ...any) {
@@ -214,9 +230,13 @@ func (r *run) flag(key string) Result {
 	defer func() { r.flags = r.flags[:len(r.flags)-1] }()
 
 	cfg := &fs.Config
-	r.tracef("flag %q (config version %d)", key, cfg.Version)
+	if r.trace != nil {
+		r.tracef("flag %q (config version %d)", key, cfg.Version)
+	}
 	if !cfg.Enabled {
-		r.tracef("flag is off: serving off variant %q", cfg.OffVariant)
+		if r.trace != nil {
+			r.tracef("flag is off: serving off variant %q", cfg.OffVariant)
+		}
 		return r.result(fs, cfg.OffVariant, Result{Reason: ReasonOff})
 	}
 
@@ -228,14 +248,20 @@ func (r *run) flag(key string) Result {
 			return errResult(key, cfg.Version, sub.Error, sub.Message)
 		}
 		if sub.Reason == ReasonOff || sub.Failed() || sub.Variant != p.Variant {
-			r.tracef("prerequisite %q served %q (want %q): serving off variant", p.Flag, sub.Variant, p.Variant)
+			if r.trace != nil {
+				r.tracef("prerequisite %q served %q (want %q): serving off variant", p.Flag, sub.Variant, p.Variant)
+			}
 			return r.result(fs, cfg.OffVariant, Result{Reason: ReasonPrerequisiteFailed, PrerequisiteKey: p.Flag})
 		}
-		r.tracef("prerequisite %q satisfied with %q", p.Flag, sub.Variant)
+		if r.trace != nil {
+			r.tracef("prerequisite %q satisfied with %q", p.Flag, sub.Variant)
+		}
 	}
 
 	if v, ok := r.e.targets[key][r.ctx.Key]; ok && r.ctx.Key != "" {
-		r.tracef("context %q is individually targeted: serving %q", r.ctx.Key, v)
+		if r.trace != nil {
+			r.tracef("context %q is individually targeted: serving %q", r.ctx.Key, v)
+		}
 		return r.result(fs, v, Result{Reason: ReasonTargetMatch})
 	}
 
@@ -246,15 +272,21 @@ func (r *run) flag(key string) Result {
 			return r.fail(key, cfg.Version, err)
 		}
 		if !ok {
-			r.tracef("rule %d (%s) did not match", i, rule.ID)
+			if r.trace != nil {
+				r.tracef("rule %d (%s) did not match", i, rule.ID)
+			}
 			continue
 		}
-		r.tracef("rule %d (%s) matched", i, rule.ID)
+		if r.trace != nil {
+			r.tracef("rule %d (%s) matched", i, rule.ID)
+		}
 		variant, inExp := r.serve(fs, rule.Serve)
 		return r.result(fs, variant, Result{Reason: ReasonRuleMatch, RuleIndex: i, RuleID: rule.ID, InExperiment: inExp})
 	}
 
-	r.tracef("no rule matched: serving fallthrough")
+	if r.trace != nil {
+		r.tracef("no rule matched: serving fallthrough")
+	}
 	variant, inExp := r.serve(fs, cfg.Fallthrough)
 	return r.result(fs, variant, Result{Reason: ReasonFallthrough, InExperiment: inExp})
 }
@@ -308,7 +340,9 @@ func (r *run) serve(fs *model.FlagState, s model.Serve) (string, bool) {
 		}
 	}
 	variant, _ := pickVariant(s.Rollout, bucket)
-	r.tracef("rollout by %q: bucket %d of %d -> %q", attr, bucket, model.TotalWeight, variant)
+	if r.trace != nil {
+		r.tracef("rollout by %q: bucket %d of %d -> %q", attr, bucket, model.TotalWeight, variant)
+	}
 	return variant, usable && s.Rollout.Experiment
 }
 
@@ -389,8 +423,10 @@ func (r *run) anyValue(c *model.Clause, attr any) bool {
 // exclusion beats explicit inclusion, which beats rules. Unknown segments
 // contain nobody.
 func (r *run) segment(key string) (bool, error) {
-	if m, ok := r.segMemo[key]; ok {
-		return m, nil
+	for _, m := range r.segMemo {
+		if m.key == key {
+			return m.in, nil
+		}
 	}
 	if slices.Contains(r.segments, key) {
 		chain := strings.Join(append(slices.Clone(r.segments), key), " -> ")
@@ -401,7 +437,9 @@ func (r *run) segment(key string) (bool, error) {
 	}
 	seg := r.e.snap.Segments[key]
 	if seg == nil {
-		r.tracef("segment %q does not exist", key)
+		if r.trace != nil {
+			r.tracef("segment %q does not exist", key)
+		}
 		return false, nil
 	}
 	r.segments = append(r.segments, key)
@@ -410,10 +448,7 @@ func (r *run) segment(key string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if r.segMemo == nil {
-		r.segMemo = map[string]bool{}
-	}
-	r.segMemo[key] = m
+	r.segMemo = append(r.segMemo, segMemo{key, m})
 	return m, nil
 }
 
@@ -421,11 +456,15 @@ func (r *run) segmentMembership(seg *model.Segment) (bool, error) {
 	idx := r.e.segIndex[seg.Key]
 	if idx != nil && r.ctx.Key != "" {
 		if _, ok := idx.excluded[r.ctx.Key]; ok {
-			r.tracef("segment %q: context explicitly excluded", seg.Key)
+			if r.trace != nil {
+				r.tracef("segment %q: context explicitly excluded", seg.Key)
+			}
 			return false, nil
 		}
 		if _, ok := idx.included[r.ctx.Key]; ok {
-			r.tracef("segment %q: context explicitly included", seg.Key)
+			if r.trace != nil {
+				r.tracef("segment %q: context explicitly included", seg.Key)
+			}
 			return true, nil
 		}
 	}
@@ -439,7 +478,9 @@ func (r *run) segmentMembership(seg *model.Segment) (bool, error) {
 			continue
 		}
 		if rule.Weight == nil {
-			r.tracef("segment %q: rule %q matched", seg.Key, rule.ID)
+			if r.trace != nil {
+				r.tracef("segment %q: rule %q matched", seg.Key, rule.ID)
+			}
 			return true, nil
 		}
 		attr := rule.BucketBy
@@ -456,10 +497,14 @@ func (r *run) segmentMembership(seg *model.Segment) (bool, error) {
 		}
 		b := Bucket(seg.Key+"."+rule.ID, bv)
 		if b < *rule.Weight {
-			r.tracef("segment %q: rule %q matched (bucket %d < %d)", seg.Key, rule.ID, b, *rule.Weight)
+			if r.trace != nil {
+				r.tracef("segment %q: rule %q matched (bucket %d < %d)", seg.Key, rule.ID, b, *rule.Weight)
+			}
 			return true, nil
 		}
 	}
-	r.tracef("segment %q: no match", seg.Key)
+	if r.trace != nil {
+		r.tracef("segment %q: no match", seg.Key)
+	}
 	return false, nil
 }
