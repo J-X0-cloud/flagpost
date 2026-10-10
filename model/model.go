@@ -96,9 +96,10 @@ type FlagConfig struct {
 	// Salt seeds the bucketing hash. Changing it reshuffles every user's
 	// bucket for this flag, which is occasionally what you want when
 	// restarting an experiment.
-	Salt      string    `json:"salt"`
-	Version   int64     `json:"version"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	Salt    string `json:"salt"`
+	Version int64  `json:"version"`
+	// UpdatedAt is omitted for configurations that were never saved.
+	UpdatedAt time.Time `json:"updatedAt,omitzero"`
 }
 
 // Serve describes what to serve once evaluation reaches a rule or the
